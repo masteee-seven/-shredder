@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>UNSAID SHREDDER</title>
+<style>
+:root{--bg:#000;--panel:#240a3a;--line:#ff2bd6;--ink:#f3ffe0;--muted:#b6ff3c;--accent:#b6ff00;color-scheme:dark;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:#000;color:var(--ink);font-family:"Hiragino Sans","Yu Gothic","Noto Sans JP",sans-serif;line-height:1.7}
+.wrap{max-width:780px;margin:0 auto;padding:28px 18px 40px;position:relative;z-index:1}
+#rain,#big,#bolt{position:fixed;left:0;top:0;width:100%;height:100%;z-index:0;pointer-events:none;opacity:.55;aspect-ratio:auto;border:0;border-radius:0;box-shadow:none;background:transparent}
+#bolt{opacity:1}
+#big{opacity:.5}
+h1{display:inline-block;position:relative;font-size:2.2rem;font-weight:900;margin:0 0 4px;letter-spacing:.14em;font-family:Impact,"Arial Black","Helvetica Neue",sans-serif;color:var(--accent);animation:glitch 2.4s infinite steps(1)}
+@keyframes glitch{0%,92%,100%{transform:none}93%{transform:translate(3px,-1px) skewX(6deg)}95%{transform:translate(-3px,1px)}97%{transform:translate(2px,0) skewX(-6deg)}}
+.ts{position:absolute;left:0;top:0;white-space:nowrap;visibility:hidden;pointer-events:none}
+@media (prefers-reduced-motion:reduce){h1,button.go{animation:none}}
+.lead{margin:0 0 22px;color:#fff;font-size:.92rem}
+.row{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
+.ctl{flex:1 1 280px;min-width:0}
+label.t{display:block;font-size:.9rem;margin-bottom:6px;color:var(--muted)}
+textarea{width:100%;height:132px;resize:none;background:var(--panel);color:var(--ink);border:2px solid var(--line);box-shadow:0 0 12px #ff2bd666;border-radius:6px;padding:12px;font:inherit;font-size:1.05rem;line-height:1.6}
+textarea:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.meta{display:flex;justify-content:space-between;font-size:.82rem;color:var(--muted);margin:4px 0 14px}
+.btns{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+button{font:inherit;cursor:pointer;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:10px 16px}
+button.go{background:var(--accent);border-color:#ff2bd6;color:#1a0030;font-weight:900;padding:12px 30px;font-size:1.1rem;box-shadow:0 0 0 3px #ff2bd6,0 0 22px #b6ff00;animation:pulse 1s infinite alternate}
+@keyframes pulse{to{box-shadow:0 0 0 3px #00f0ff,0 0 34px #ff2bd6}}
+button:disabled{opacity:.45;cursor:default}
+.snd{font-size:.88rem;color:var(--muted);display:flex;gap:6px;align-items:center}
+#msg{min-height:1.7em;margin:16px 0 4px;font-size:.98rem}
+.note{font-size:.8rem;color:var(--muted);margin:14px 0 0}
+.stage{flex:0 1 360px;width:100%;max-width:360px}
+canvas{width:100%;height:auto;display:block;aspect-ratio:360/600;border-radius:8px;background:#0b0014;border:3px solid #ff2bd6;box-shadow:0 0 28px #ff2bd6,0 0 60px #6a00a8}
+</style>
+</head>
+<body>
+<canvas id="rain" aria-hidden="true"></canvas>
+<canvas id="big" aria-hidden="true"></canvas>
+<canvas id="bolt" aria-hidden="true"></canvas>
+<div class="wrap">
+  <h1>UNSAID SHREDDER</h1>
+  <p class="lead">言えばパワハラ、言わなければモラハラ、難しい時代になりました。<br>言えなかったこと、言わなかったことを書いて、細かく刻んで捨てましょう。</p>
+  <div class="row">
+    <div class="ctl">
+      <label class="t" for="t">飲み込んだ言葉</label>
+      <textarea id="t" maxlength="60" placeholder="あのとき言えなかったこと…"></textarea>
+      <div class="meta"><span id="cnt">これまでに粉砕した言葉：0枚</span><span id="len">0/60</span></div>
+      <div class="btns">
+        <button class="go" id="go" type="button">粉砕する</button>
+        <button id="clr" type="button">ゴミ箱を空にする</button>
+        <label class="snd"><input type="checkbox" id="snd" checked>音あり</label>
+      </div>
+      <div id="msg" aria-live="polite"></div>
+      <p class="note">入力した言葉はこの端末の外には送信されず、保存もされません。</p>
+    </div>
+    <div class="stage"><canvas id="c" aria-label="シュレッダーのアニメーション"></canvas></div>
+  </div>
+</div>
+<script>
+const W=360,H=600,S=2,PW=280,PH=150,N=28,SW=PW/N,PX=40,SLOT=200,BOT=312,BINT=440,BINB=588,BL=40,BR=320;
+const PF='"Yu Mincho","Hiragino Mincho ProN","Noto Serif JP",serif';
+const $=id=>document.getElementById(id);
+const cv=$('c'),ctx=cv.getContext('2d'),dpr=Math.min(window.devicePixelRatio||1,2);
+cv.width=W*dpr;cv.height=H*dpr;
+const paper=document.createElement('canvas');paper.width=PW*S;paper.height=PH*S;
+const pc=paper.getContext('2d');
+const input=$('t'),go=$('go');
+let run=false,p=0,ce=[],ml=[],snap=null,pieces=[],last=0,total=0,snd_=null,ac=null,sparks=[],flash=0;
+const SC=['#b6ff00','#ff2bd6','#00f0ff','#ffe600'];
+try{total=parseInt(localStorage.getItem('shred-count')||'0',10)||0}catch(e){}
+$('cnt').textContent='これまでに粉砕した言葉：'+total+'枚';
+
+function wrap(t){const out=[];pc.font='19px '+PF;
+  for(const para of t.split('\n')){let l='';
+    for(const ch of para){if(l&&pc.measureText(l+ch).width>PW-36){out.push(l);l=ch}else l+=ch}
+    out.push(l)}
+  return out.slice(0,5)}
+function drawPaper(){
+  pc.setTransform(S,0,0,S,0,0);
+  pc.fillStyle='#eaff9e';pc.fillRect(0,0,PW,PH);
+  pc.strokeStyle='#ff8ae6';pc.lineWidth=1;
+  for(let y=28;y<PH;y+=28){pc.beginPath();pc.moveTo(0,y+.5);pc.lineTo(PW,y+.5);pc.stroke()}
+  pc.strokeStyle='#00c8e0';pc.beginPath();pc.moveTo(14.5,0);pc.lineTo(14.5,PH);pc.stroke();
+  const t=input.value;
+  pc.textBaseline='alphabetic';
+  if(!t){pc.fillStyle='#8a6fa0';pc.font='15px '+PF;pc.fillText('ここに言葉が書かれます',24,22);return}
+  pc.fillStyle='#2a0040';pc.font='19px '+PF;
+  wrap(t).forEach((l,i)=>pc.fillText(l,24,28*(i+1)-7));
+}
+input.addEventListener('input',()=>{$('len').textContent=input.value.length+'/60';if(!run)drawPaper()});
+drawPaper();
+
+const rl=()=>28+Math.random()*50;
+function startSnd(){
+  if(!$('snd').checked)return;
+  try{ac=ac||new(window.AudioContext||window.webkitAudioContext)();ac.resume();
+    const b=ac.createBuffer(1,ac.sampleRate,ac.sampleRate),d=b.getChannelData(0);
+    for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+    const s=ac.createBufferSource();s.buffer=b;s.loop=true;
+    const f=ac.createBiquadFilter();f.type='bandpass';f.frequency.value=1400;f.Q.value=.7;
+    const g=ac.createGain();g.gain.value=.12;
+    const o=ac.createOscillator();o.type='sawtooth';o.frequency.value=38;
+    const og=ac.createGain();og.gain.value=.08;o.connect(og);og.connect(g.gain);
+    s.connect(f);f.connect(g);g.connect(ac.destination);s.start();o.start();snd_=[s,o,g]}catch(e){}}
+function stopSnd(){
+  if(!snd_)return;const[s,o,g]=snd_;
+  try{g.gain.setTargetAtTime(0,ac.currentTime,.15);s.stop(ac.currentTime+.7);o.stop(ac.currentTime+.7)}catch(e){}
+  snd_=null}
+
+function start(){
+  if(run||!input.value.trim())return;
+  drawPaper();
+  snap=document.createElement('canvas');snap.width=paper.width;snap.height=paper.height;
+  snap.getContext('2d').drawImage(paper,0,0);
+  run=true;p=0;ce=Array(N).fill(PH);ml=Array.from({length:N},rl);
+  go.disabled=true;$('msg').textContent='粉砕中…';startSnd();last=performance.now()}
+go.addEventListener('click',start);
+$('clr').addEventListener('click',()=>{pieces=[]});
+
+function spawn(k,sy,len){
+  const x=PX+k*SW+SW/2;
+  pieces.push({k,sy,len,x,y:BOT+len/2,vx:(Math.random()-.5)*34+(180-x)*.04,vy:20+Math.random()*40,
+    r:0,vr:(Math.random()-.5)*6,fl:BINB-6-Math.random()*40,done:false,img:snap});
+  if(pieces.length>800)pieces.shift()}
+function finish(){
+  for(let k=0;k<N;k++){const d=ce[k];if(d>.5)spawn(k,0,d)}
+  run=false;stopSnd();flash=1;total++;
+  try{localStorage.setItem('shred-count',String(total))}catch(e){}
+  $('cnt').textContent='これまでに粉砕した言葉：'+total+'枚';
+  const m=['☠ 粉々。もう誰にも読めません。','☠ 毒は吐き出しました。','☠ 跡形もなく消えました。'];
+  $('msg').textContent=m[Math.floor(Math.random()*m.length)];
+  input.value='';$('len').textContent='0/60';p=0;drawPaper();go.disabled=false}
+
+function step(dt){
+  if(run){for(let i=0;i<5;i++){const up=Math.random()<.5;sparks.push({x:PX+Math.random()*PW,y:up?SLOT-2:BOT,vx:(Math.random()-.5)*260,vy:up?-60-Math.random()*320:-20+Math.random()*120,life:.5+Math.random()*.5,c:SC[Math.floor(Math.random()*4)]})}}
+  for(const q of sparks){q.vy+=700*dt;q.x+=q.vx*dt;q.y+=q.vy*dt;q.life-=dt}
+  sparks=sparks.filter(q=>q.life>0);flash=Math.max(0,flash-dt*2.5);
+  if(run){p+=70*dt;const top=Math.max(0,PH-p);
+    for(let k=0;k<N;k++)while(ce[k]-top>=ml[k]){spawn(k,ce[k]-ml[k],ml[k]);ce[k]-=ml[k];ml[k]=rl()}
+    if(p>=PH)finish()}
+  for(const q of pieces){if(q.done)continue;
+    q.vy+=900*dt;q.y+=q.vy*dt;q.x+=q.vx*dt;q.r+=q.vr*dt;
+    if(q.y>=q.fl){q.done=true;q.y=q.fl;q.vx=q.vr=0;
+      q.r=(Math.random()<.5?1.57:-1.57)+(Math.random()-.5)*.8;
+      const h=q.len/2;q.x=Math.max(BL+h,Math.min(BR-h,q.x))}}}
+
+function draw(now){
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.fillStyle='#0b0014';ctx.fillRect(0,0,W,H);
+  const gl=ctx.createRadialGradient(180,330,10,180,330,300);
+  gl.addColorStop(0,run?'rgba(255,43,214,.55)':'rgba(130,0,200,.35)');gl.addColorStop(1,'rgba(11,0,20,0)');
+  ctx.fillStyle=gl;ctx.fillRect(0,0,W,H);
+  if(run){ctx.setTransform(dpr,0,0,dpr,(Math.random()-.5)*5*dpr,(Math.random()-.5)*5*dpr)}
+  // bin
+  const bg=ctx.createLinearGradient(0,BINT,0,BINB);bg.addColorStop(0,'#1a0030');bg.addColorStop(1,'#2f7a00');
+  ctx.fillStyle=bg;ctx.fillRect(30,BINT,300,BINB-BINT+4);
+  ctx.save();ctx.shadowColor='#b6ff00';ctx.shadowBlur=14;ctx.strokeStyle='#b6ff00';ctx.lineWidth=4;
+  ctx.beginPath();ctx.moveTo(32,BINT);ctx.lineTo(32,BINB+2);ctx.lineTo(328,BINB+2);ctx.lineTo(328,BINT);ctx.stroke();ctx.restore();
+  // pieces
+  for(const q of pieces){
+    ctx.save();ctx.translate(q.x,q.y);ctx.rotate(q.r);
+    ctx.drawImage(q.img,q.k*SW*S,q.sy*S,SW*S,q.len*S,-(SW-1)/2,-q.len/2,SW-1,q.len);
+    ctx.restore()}
+  // paper (clipped above the slot)
+  const src=run?snap:paper;
+  ctx.save();ctx.beginPath();ctx.rect(0,0,W,SLOT-3);ctx.clip();
+  ctx.shadowColor='rgba(0,0,0,.35)';ctx.shadowBlur=8;
+  ctx.drawImage(src,PX,SLOT-PH+p,PW,PH);ctx.restore();
+  // body (futuristic)
+  const jx=run?(Math.random()-.5)*1.6:0,jy=run?(Math.random()-.5)*1.2:0;
+  const nc=run?'#ff2bd6':'#00f0ff';
+  ctx.save();ctx.translate(jx,jy);
+  ctx.beginPath();
+  ctx.moveTo(38,SLOT-6);ctx.lineTo(322,SLOT-6);ctx.lineTo(338,SLOT+10);ctx.lineTo(338,BOT-14);
+  ctx.lineTo(322,BOT);ctx.lineTo(38,BOT);ctx.lineTo(22,BOT-14);ctx.lineTo(22,SLOT+10);ctx.closePath();
+  const g=ctx.createLinearGradient(0,SLOT,0,BOT);
+  g.addColorStop(0,'#2a2150');g.addColorStop(.15,'#14102c');g.addColorStop(1,'#070510');
+  ctx.fillStyle=g;ctx.fill();
+  ctx.save();ctx.shadowColor=nc;ctx.shadowBlur=run?22:14;ctx.strokeStyle=nc;ctx.lineWidth=2;ctx.stroke();ctx.restore();
+  // slot with scanning light
+  ctx.fillStyle='#000';ctx.beginPath();ctx.roundRect(PX-10,SLOT-5,PW+20,8,4);ctx.fill();
+  const sx=((now/9)%(PW+120))+PX-60;
+  const sg=ctx.createLinearGradient(sx-60,0,sx+60,0);
+  sg.addColorStop(0,'rgba(0,240,255,0)');sg.addColorStop(.5,'#00f0ff');sg.addColorStop(1,'rgba(0,240,255,0)');
+  ctx.save();ctx.beginPath();ctx.rect(PX-10,SLOT-5,PW+20,8);ctx.clip();
+  ctx.fillStyle=run?'#ff2bd6':sg;ctx.fillRect(PX-10,SLOT-2,PW+20,2);ctx.restore();
+  // HUD
+  ctx.fillStyle=run?(Math.floor(now/80)%2?'#ff2bd6':'#ffe600'):'#b6ff00';
+  ctx.beginPath();ctx.arc(46,SLOT+30,5,0,7);ctx.fill();
+  ctx.save();ctx.strokeStyle=nc;ctx.lineWidth=1;ctx.beginPath();ctx.arc(46,SLOT+30,10,0,7);ctx.stroke();ctx.restore();
+  ctx.fillStyle='#d8f8ff';ctx.font='12px ui-monospace,Menlo,Consolas,monospace';ctx.textAlign='left';
+  ctx.fillText(run?'SHREDDING':'STANDBY',66,SLOT+34);
+  ctx.textAlign='right';ctx.fillText((run?Math.min(100,Math.round(p/PH*100)):0)+'%',318,SLOT+34);ctx.textAlign='left';
+  const on=run?Math.floor(p/PH*12):0;
+  for(let q=0;q<12;q++){ctx.fillStyle=q<on?nc:'#241a45';ctx.fillRect(48+q*22,SLOT+52,18,8)}
+  ctx.fillStyle='#241a45';for(let q=0;q<8;q++)ctx.fillRect(48+q*34,SLOT+74,24,2);
+  if(run){const lg=ctx.createLinearGradient(0,BOT,0,BOT+50);lg.addColorStop(0,'rgba(255,43,214,.55)');lg.addColorStop(1,'rgba(255,43,214,0)');
+    ctx.fillStyle=lg;ctx.fillRect(PX-6,BOT,PW+12,50)}
+  ctx.restore();
+  // hanging strips
+  if(run){const top=Math.max(0,PH-p);
+    for(let k=0;k<N;k++){const d=ce[k]-top;if(d<=0)continue;
+      const sw=Math.sin(now/180+k)*.9*(d/60);
+      ctx.drawImage(snap,k*SW*S,top*S,SW*S,d*S,PX+k*SW+sw,BOT,SW-1,d)}}
+  ctx.save();ctx.fillStyle='#000';ctx.beginPath();ctx.roundRect(PX-10,BOT-5,PW+20,7,3);ctx.fill();ctx.shadowColor=run?'#ff2bd6':'#00f0ff';ctx.shadowBlur=10;ctx.fillStyle=run?'#ff2bd6':'#00f0ff';ctx.fillRect(PX-6,BOT,PW+12,1.5);ctx.restore();
+  ctx.save();ctx.globalCompositeOperation='lighter';
+  for(const q of sparks){ctx.globalAlpha=Math.min(1,q.life*2);ctx.fillStyle=q.c;ctx.fillRect(q.x,q.y,3,3)}
+  ctx.restore();
+  if(flash>0){ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='rgba(255,43,214,'+(flash*.5)+')';ctx.fillRect(0,0,W,H);
+    ctx.save();ctx.translate(180,120);ctx.rotate(-.15);ctx.globalAlpha=Math.min(1,flash*1.5);
+    ctx.font='900 44px "Hiragino Sans","Yu Gothic",sans-serif';ctx.textAlign='center';ctx.lineWidth=6;ctx.strokeStyle='#1a0030';
+    ctx.strokeText('粉砕完了！',0,0);ctx.fillStyle='#b6ff00';ctx.fillText('粉砕完了！',0,0);ctx.restore()}
+}
+function tick(now){
+  const dt=Math.min(.05,(now-last)/1000||0);last=now;
+  step(dt);draw(now);requestAnimationFrame(tick)}
+requestAnimationFrame(t=>{last=t;tick(t)});
+
+// digital rain: power-harassment words
+const rc=$('rain'),rx=rc.getContext('2d'),RM=matchMedia('(prefers-reduced-motion:reduce)').matches;
+const WORDS=['やる気あるの？','給料泥棒','使えない奴','辞めちまえ','常識だろ','俺の若い頃は','根性が足りん','なんでできない','代わりはいる','ミスするな','空気読め','見て覚えろ','お前が悪い','残業も仕事','口答えするな','やって当然','だから言ったろ','察しろ'];
+const JF='"Hiragino Sans","Yu Gothic","Noto Sans JP",sans-serif';
+const FS=18;let cols=[],rlast=0;
+function newWord(c){c.w=WORDS[Math.floor(Math.random()*WORDS.length)];c.k=-Math.floor(2+Math.random()*7)}
+function rsize(){rc.width=innerWidth;rc.height=innerHeight;
+  const n=Math.ceil(innerWidth/FS);
+  cols=Array.from({length:n},(_,i)=>{
+    if(cols[i])return cols[i];
+    const y=-Math.random()*40,c={y,r:Math.floor(y),s:.12+Math.random()*.25,m:i%7===0};newWord(c);return c})}
+addEventListener('resize',rsize);rsize();
+function rain(now){
+  requestAnimationFrame(rain);
+  if(RM||now-rlast<45)return;rlast=now;
+  rx.globalCompositeOperation='destination-out';rx.fillStyle='rgba(0,0,0,.06)';rx.fillRect(0,0,rc.width,rc.height);
+  rx.globalCompositeOperation='source-over';rx.font=FS+'px '+JF;rx.textAlign='center';
+  const boost=run?2.4:1;
+  cols.forEach((c,i)=>{
+    c.y+=c.s*boost;const r=Math.floor(c.y);
+    while(c.r<r){c.r++;
+      if(c.k>=0&&c.r>=0){rx.fillStyle=c.m?'#ff2bd6':'#b6ff00';rx.fillText(c.w[c.k],i*FS+FS/2,c.r*FS+FS)}
+      c.k++;if(c.k>=c.w.length)newWord(c)}
+    if(c.r*FS>rc.height&&Math.random()>.97){c.y=0;c.r=-1;c.s=.12+Math.random()*.25}})}
+requestAnimationFrame(rain);
+
+// big words flashing in the background
+const bgc=$('big'),gx=bgc.getContext('2d');
+let bigW=null,nextBig=performance.now()+2000,bl=0;
+function gsize(){bgc.width=innerWidth;bgc.height=innerHeight}
+addEventListener('resize',gsize);gsize();
+function bigFrame(now){
+  requestAnimationFrame(bigFrame);
+  const dt=Math.min(.05,(now-bl)/1000||0);bl=now;
+  gx.clearRect(0,0,bgc.width,bgc.height);
+  if(RM)return;
+  if(!bigW&&now>nextBig){
+    const sh=WORDS.filter(w=>w.length<=7),w=sh[Math.floor(Math.random()*sh.length)];
+    let size=70+Math.random()*70;gx.font='900 '+size+'px '+JF;
+    let tw=gx.measureText(w).width;const mx=bgc.width*.9;
+    if(tw>mx){size*=mx/tw;tw=mx}
+    bigW={w,size,tw,x:Math.random()*(bgc.width-tw),y:bgc.height*(.2+Math.random()*.6),t:0,life:2.2,c:Math.random()<.3?'#ff2bd6':'#b6ff00'};
+    nextBig=now+3500+Math.random()*4000}
+  if(!bigW)return;
+  bigW.t+=dt;if(bigW.t>=bigW.life){bigW=null;return}
+  gx.save();gx.globalAlpha=Math.sin(Math.PI*bigW.t/bigW.life)*.9;
+  gx.font='900 '+bigW.size+'px '+JF;gx.textBaseline='middle';
+  gx.translate(bigW.x+(Math.random()-.5)*4,bigW.y+(Math.random()-.5)*4);
+  gx.shadowColor=bigW.c;gx.shadowBlur=20;gx.fillStyle=bigW.c;gx.fillText(bigW.w,0,0);gx.restore()}
+requestAnimationFrame(bigFrame);
+
+// lightning
+const bc=$('bolt'),bx=bc.getContext('2d');
+let bolt=null,nextBolt=performance.now()+2500+Math.random()*3000,blast=0;
+function bsize(){bc.width=innerWidth;bc.height=innerHeight}
+addEventListener('resize',bsize);bsize();
+function makeBolt(){
+  let x=innerWidth*(.1+Math.random()*.8),y=0;const main=[[x,y]],br=[];
+  const end=innerHeight*(.55+Math.random()*.4);
+  while(y<end){y+=15+Math.random()*30;x+=(Math.random()-.5)*60;main.push([x,y]);
+    if(Math.random()<.12){const b=[[x,y]];let X=x,Y=y;const d=Math.random()<.5?-1:1;
+      for(let i=0,n=5+Math.random()*5;i<n;i++){Y+=12+Math.random()*20;X+=d*(8+Math.random()*25);b.push([X,Y])}br.push(b)}}
+  return {paths:[main,...br],t:0,life:.5}}
+function lightning(now){
+  requestAnimationFrame(lightning);
+  const dt=Math.min(.05,(now-blast)/1000||0);blast=now;
+  bx.clearRect(0,0,bc.width,bc.height);
+  if(RM)return;
+  if(!bolt&&now>nextBolt){bolt=makeBolt();nextBolt=now+4000+Math.random()*6000}
+  if(!bolt)return;
+  bolt.t+=dt;
+  if(bolt.t>=bolt.life){bolt=null;return}
+  const a=(1-bolt.t/bolt.life)*(Math.random()<.3?.4:1);
+  bx.fillStyle='rgba(200,160,255,'+(a*.22)+')';bx.fillRect(0,0,bc.width,bc.height);
+  bx.save();bx.globalAlpha=a;bx.strokeStyle='#fff';bx.shadowColor='#c58bff';bx.shadowBlur=24;bx.lineJoin='round';
+  bolt.paths.forEach((p,i)=>{bx.lineWidth=i?1.5:3;bx.beginPath();p.forEach((q,j)=>j?bx.lineTo(q[0],q[1]):bx.moveTo(q[0],q[1]));bx.stroke()});
+  bx.restore()}
+requestAnimationFrame(lightning);
+
+// title shatter loop (glitch stays)
+(function(){
+  const h=document.querySelector('h1'),txt=h.textContent;
+  h.textContent='';
+  const base=document.createElement('span');base.textContent=txt;h.appendChild(base);
+  const C=16,R=3,v=[],shards=[];
+  for(let r=0;r<=R;r++){v[r]=[];for(let c=0;c<=C;c++){
+    let x=c/C*100,y=r/R*100;
+    if(c>0&&c<C)x+=(Math.random()-.5)*100/C*.7;
+    if(r>0&&r<R)y+=(Math.random()-.5)*100/R*.6;
+    v[r][c]=[x,y]}}
+  for(let r=0;r<R;r++)for(let c=0;c<C;c++){
+    const a=v[r][c],b=v[r][c+1],d=v[r+1][c+1],e=v[r+1][c];
+    const tris=Math.random()<.5?[[a,b,d],[a,d,e]]:[[a,b,e],[b,d,e]];
+    tris.forEach(t=>{
+      const el=document.createElement('span');el.className='ts';el.textContent=txt;el.setAttribute('aria-hidden','true');
+      el.style.clipPath='polygon('+t.map(p=>p[0].toFixed(2)+'% '+p[1].toFixed(2)+'%').join(',')+')';
+      const cx=(t[0][0]+t[1][0]+t[2][0])/3,cy=(t[0][1]+t[1][1]+t[2][1])/3;
+      el.style.transformOrigin=cx.toFixed(1)+'% '+cy.toFixed(1)+'%';
+      el._c=[cx/100-.5,cy/100-.5];
+      h.appendChild(el);shards.push(el)})}
+  function shatter(){
+    const W=h.offsetWidth,Hh=h.offsetHeight;
+    base.style.visibility='hidden';
+    shards.forEach(e=>{
+      e.style.visibility='visible';
+      const fx=e._c[0],fy=e._c[1];
+      const dx=fx*W*(.5+Math.random()*.9)+(Math.random()-.5)*40;
+      const dy=fy*Hh*(2+Math.random()*3)-Math.random()*50;
+      const rot=(Math.random()-.5)*540;
+      const a=e.animate([
+        {transform:'none',opacity:1,color:'#b6ff00'},
+        {transform:'scale(1.06)',opacity:1,color:'#ffffff',offset:.1,easing:'cubic-bezier(.1,.8,.3,1)'},
+        {transform:'translate('+dx+'px,'+dy+'px) rotate('+rot*.6+'deg) scale(.9)',opacity:1,color:'#b6ff00',offset:.45,easing:'ease-in'},
+        {transform:'translate('+dx*1.15+'px,'+(dy+170+Math.random()*90)+'px) rotate('+rot+'deg) scale(.5)',opacity:0,color:'#ff2bd6'}
+      ],{duration:1100,delay:Math.hypot(fx,fy)*180,fill:'forwards'});
+      a.onfinish=()=>{e.style.visibility='hidden';a.cancel()}});
+    setTimeout(()=>{
+      base.style.visibility='visible';
+      base.animate([{opacity:0,transform:'scale(1.25)'},{opacity:1,transform:'none'}],{duration:450,easing:'ease-out'})},1500)}
+  if(RM)return;
+  setTimeout(function loop(){shatter();setTimeout(loop,7000)},1500);
+})();
+</script>
+</body>
+</html>
