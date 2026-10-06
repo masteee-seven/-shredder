@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>UNSAID SHREDDER</title>
+<link href="https://fonts.googleapis.com/css2?family=Yusei+Magic&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#000;--panel:#240a3a;--line:#ff2bd6;--ink:#f3ffe0;--muted:#b6ff3c;--accent:#b6ff00;color-scheme:dark;
 box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -74,25 +75,44 @@ const SC=['#b6ff00','#ff2bd6','#00f0ff','#ffe600'];
 try{total=parseInt(localStorage.getItem('shred-count')||'0',10)||0}catch(e){}
 $('cnt').textContent='これまでに粉砕した言葉：'+total+'枚';
 
-function wrap(t){const out=[];pc.font='19px '+PF;
-  for(const para of t.split('\n')){let l='';
-    for(const ch of para){if(l&&pc.measureText(l+ch).width>PW-36){out.push(l);l=ch}else l+=ch}
-    out.push(l)}
-  return out.slice(0,5)}
+const HF='"Yusei Magic","Yomogi","Hiragino Maru Gothic ProN","Yu Gothic",cursive';
+const INK='#15151f';
+function rnd(i,c){const x=Math.sin(i*127.1+c*311.7)*43758.5453;return x-Math.floor(x)}
+function layout(t){
+  const lines=[];let line=[],w=0,idx=0;
+  for(const ch of t){idx++;
+    if(ch==='\n'){lines.push(line);line=[];w=0;continue}
+    const sz=21*(.88+rnd(idx,ch.charCodeAt(0))*.3);
+    pc.font=sz.toFixed(1)+'px '+HF;
+    const adv=pc.measureText(ch).width*.95;
+    if(w+adv>PW-44&&line.length){lines.push(line);line=[];w=0}
+    line.push({ch,sz,adv,i:idx});w+=adv}
+  lines.push(line);return lines.slice(0,5)}
 function drawPaper(){
   pc.setTransform(S,0,0,S,0,0);
-  pc.fillStyle='#eaff9e';pc.fillRect(0,0,PW,PH);
-  pc.strokeStyle='#ff8ae6';pc.lineWidth=1;
+  pc.fillStyle='#ffffff';pc.fillRect(0,0,PW,PH);
+  pc.strokeStyle='#c8d9f0';pc.lineWidth=1;
   for(let y=28;y<PH;y+=28){pc.beginPath();pc.moveTo(0,y+.5);pc.lineTo(PW,y+.5);pc.stroke()}
-  pc.strokeStyle='#00c8e0';pc.beginPath();pc.moveTo(14.5,0);pc.lineTo(14.5,PH);pc.stroke();
+  pc.strokeStyle='#f4a3a3';pc.beginPath();pc.moveTo(14.5,0);pc.lineTo(14.5,PH);pc.stroke();
   const t=input.value;
-  pc.textBaseline='alphabetic';
-  if(!t){pc.fillStyle='#8a6fa0';pc.font='15px '+PF;pc.fillText('ここに言葉が書かれます',24,22);return}
-  pc.fillStyle='#2a0040';pc.font='19px '+PF;
-  wrap(t).forEach((l,i)=>pc.fillText(l,24,28*(i+1)-7));
-}
-input.addEventListener('input',()=>{$('len').textContent=input.value.length+'/60';if(!run)drawPaper()});
-drawPaper();
+  pc.textBaseline='alphabetic';pc.textAlign='center';
+  if(!t){pc.fillStyle='#9a9aa8';pc.font='15px '+HF;pc.textAlign='left';pc.fillText('ここに言葉が書かれます',24,22);return}
+  pc.fillStyle=INK;pc.strokeStyle=INK;pc.lineWidth=1.1;pc.lineJoin='round';
+  layout(t).forEach((ln,li)=>{
+    let x=26+rnd(li,7)*6;
+    const base=28*(li+1)-6;
+    ln.forEach(g=>{
+      const rot=(rnd(g.i,3)-.5)*.3-.05;
+      const dy=(rnd(g.i,5)-.5)*5-(x-26)*.01;
+      pc.save();pc.translate(x+g.adv/2,base+dy);pc.rotate(rot);
+      pc.font=g.sz.toFixed(1)+'px '+HF;
+      pc.strokeText(g.ch,0,0);pc.fillText(g.ch,0,0);pc.restore();
+      x+=g.adv})})}
+function ensureFont(){
+  if(!(document.fonts&&document.fonts.load))return;
+  document.fonts.load('21px "Yusei Magic"',input.value||'あ').then(()=>{if(!run)drawPaper()}).catch(()=>{})}
+input.addEventListener('input',()=>{$('len').textContent=input.value.length+'/60';if(!run)drawPaper();ensureFont()});
+drawPaper();ensureFont();
 
 const rl=()=>28+Math.random()*50;
 function startSnd(){
