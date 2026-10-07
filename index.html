@@ -31,6 +31,7 @@ button{font:inherit;cursor:pointer;border-radius:6px;border:1px solid var(--line
 button.go{background:var(--accent);border-color:#ff2bd6;color:#1a0030;font-weight:900;padding:12px 30px;font-size:1.1rem;box-shadow:0 0 0 3px #ff2bd6,0 0 22px #b6ff00;animation:pulse 1s infinite alternate}
 @keyframes pulse{to{box-shadow:0 0 0 3px #00f0ff,0 0 34px #ff2bd6}}
 button:disabled{opacity:.45;cursor:default}
+button[aria-pressed="true"]{background:#ff2bd6;color:#1a0030;border-color:#ff2bd6}
 .snd{font-size:.88rem;color:var(--muted);display:flex;gap:6px;align-items:center}
 #msg{min-height:1.7em;margin:16px 0 4px;font-size:.98rem}
 .note{font-size:.8rem;color:var(--muted);margin:14px 0 0}
@@ -52,6 +53,7 @@ canvas{width:100%;height:auto;display:block;aspect-ratio:360/600;border-radius:8
       <div class="meta"><span id="cnt">これまでに粉砕した言葉：0枚</span><span id="len">0/60</span></div>
       <div class="btns">
         <button class="go" id="go" type="button">粉砕する</button>
+        <button id="mic" type="button" aria-pressed="false">🎤 音声入力</button>
         <button id="clr" type="button">ゴミ箱を空にする</button>
         <label class="snd"><input type="checkbox" id="snd" checked>音あり</label>
       </div>
@@ -136,7 +138,7 @@ function start(){
   drawPaper();
   snap=document.createElement('canvas');snap.width=paper.width;snap.height=paper.height;
   snap.getContext('2d').drawImage(paper,0,0);
-  run=true;p=0;ce=Array(N).fill(PH);ml=Array.from({length:N},rl);
+  if(rec&&micOn)rec.stop();run=true;p=0;ce=Array(N).fill(PH);ml=Array.from({length:N},rl);
   go.disabled=true;$('msg').textContent='粉砕中…';startSnd();last=performance.now()}
 go.addEventListener('click',start);
 $('clr').addEventListener('click',()=>{pieces=[]});
@@ -239,6 +241,23 @@ function tick(now){
   const dt=Math.min(.05,(now-last)/1000||0);last=now;
   step(dt);draw(now);requestAnimationFrame(tick)}
 requestAnimationFrame(t=>{last=t;tick(t)});
+
+// voice input
+let rec=null,micOn=false;
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition,mic=$('mic');
+function setMic(v){micOn=v;mic.textContent=v?'⏹ 停止':'🎤 音声入力';mic.setAttribute('aria-pressed',String(v))}
+if(!SR){mic.disabled=true;mic.title='このブラウザは音声入力に未対応です'}
+else mic.addEventListener('click',()=>{
+  if(micOn){rec&&rec.stop();return}
+  if(run)return;
+  rec=new SR();rec.lang='ja-JP';rec.interimResults=true;rec.continuous=true;
+  const base=input.value;
+  rec.onresult=e=>{let t='';for(let i=0;i<e.results.length;i++)t+=e.results[i][0].transcript;
+    input.value=(base+t).slice(0,60);input.dispatchEvent(new Event('input'))};
+  rec.onerror=e=>{$('msg').textContent=(e.error==='not-allowed'||e.error==='service-not-allowed')?'マイクが許可されていません。ブラウザの設定を確認してください。':'音声入力でエラーが発生しました。'};
+  rec.onend=()=>setMic(false);
+  try{rec.start();setMic(true);$('msg').textContent='聞いています…話してください'}catch(err){setMic(false)}
+});
 
 // digital rain: power-harassment words
 const rc=$('rain'),rx=rc.getContext('2d'),RM=matchMedia('(prefers-reduced-motion:reduce)').matches;
